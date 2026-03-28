@@ -1,0 +1,30 @@
+react@^18.3.1
+react-dom@^18.3.1
+typescript@^5.5.3
+
+vite@^5.4.2
+@vitejs/plugin-react@^4.3.1
+
+framer-motion@^11.3.19
+
+@types/react@^18.3.5
+@types/react-dom@^18.3.0
+
+# ──────────────────────────────────────────
+# API KEYS NEEDED (all free, easy to get):
+# ──────────────────────────────────────────
+#
+# 1. VITE_WAQI_TOKEN
+#    World Air Quality Index API — FREE
+#    Get at: https://aqicn.org/data-platform/token/
+#    (instant approval, no credit card)
+#
+# 2. VITE_OWM_KEY
+#    OpenWeatherMap API — FREE tier (1,000 calls/day)
+#    Get at: https://openweathermap.org/api
+#    (email signup, key arrives instantly)
+#
+# 3. VITE_ANTHROPIC_KEY
+#    Anthropic Claude API — FREE $5 credit on signup
+#    Get at: https://console.anthropic.com/
+#    (used for AI physiological analysis & plan rescheduling)
