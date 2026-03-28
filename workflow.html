@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AtmosWatch — API Flow</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Space+Grotesk:wght@400;600;700;800&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #060608;
+    color: #fff;
+    font-family: 'Space Grotesk', sans-serif;
+    padding: 32px;
+    min-width: 1400px;
+  }
+
+  h1 {
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.35em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.25);
+    margin-bottom: 6px;
+  }
+  .subtitle {
+    font-size: 28px;
+    font-weight: 800;
+    color: #fff;
+    margin-bottom: 40px;
+    letter-spacing: -0.03em;
+  }
+  .subtitle span { color: #00ffc8; }
+
+  /* ── LANE ── */
+  .lane {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-bottom: 18px;
+    position: relative;
+  }
+
+  /* Lane label */
+  .lane-label {
+    width: 130px;
+    flex-shrink: 0;
+    text-align: right;
+    padding-right: 16px;
+  }
+  .lane-label .icon { font-size: 18px; display: block; margin-bottom: 2px; }
+  .lane-label .name { font-size: 10px; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; }
+
+  /* Nodes container */
+  .nodes {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex: 1;
+  }
+
+  /* Node box */
+  .node {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 700;
+    text-align: center;
+    min-width: 110px;
+    max-width: 130px;
+    line-height: 1.3;
+    border: 1px solid;
+    flex-shrink: 0;
+    cursor: default;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .node:hover { transform: translateY(-2px); }
+
+  .node .node-title { font-size: 11px; font-weight: 800; margin-bottom: 3px; }
+  .node .node-sub { font-size: 9px; opacity: 0.65; font-family: 'JetBrains Mono', monospace; font-weight: 400; }
+
+  /* Node types */
+  .node.trigger {
+    background: rgba(255,255,255,0.06);
+    border-color: rgba(255,255,255,0.2);
+    color: #fff;
+  }
+  .node.api {
+    border-color: var(--c);
+    background: color-mix(in srgb, var(--c) 12%, transparent);
+    color: var(--c);
+    box-shadow: 0 0 16px color-mix(in srgb, var(--c) 15%, transparent);
+  }
+  .node.api .node-sub { color: rgba(255,255,255,0.45); }
+  .node.process {
+    background: rgba(255,255,255,0.03);
+    border-color: rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.7);
+  }
+  .node.output {
+    background: rgba(255,255,255,0.05);
+    border-color: rgba(255,255,255,0.15);
+    color: #fff;
+  }
+  .node.ai {
+    border-color: #a855f7;
+    background: rgba(168,85,247,0.1);
+    color: #c084fc;
+    box-shadow: 0 0 16px rgba(168,85,247,0.15);
+  }
+
+  /* Arrows between nodes */
+  .arrow {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    width: 28px;
+    position: relative;
+  }
+  .arrow::before {
+    content: '';
+    position: absolute;
+    left: 0; right: 8px; top: 50%;
+    height: 1px;
+    background: var(--ac, rgba(255,255,255,0.15));
+  }
+  .arrow::after {
+    content: '▶';
+    position: absolute;
+    right: 0;
+    font-size: 7px;
+    color: var(--ac, rgba(255,255,255,0.25));
+    transform: translateY(-50%);
+    top: 50%;
+  }
+
+  .arrow.down {
+    width: 0; height: 16px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .arrow.down::before {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 8px; left: 50%;
+    width: 1px; height: auto;
+    background: rgba(255,255,255,0.15);
+  }
+  .arrow.down::after {
+    content: '▼';
+    position: absolute;
+    bottom: 0; left: 50%;
+    transform: translateX(-50%);
+    font-size: 7px;
+  }
+
+  /* Section divider */
+  .section-divider {
+    height: 1px;
+    background: rgba(255,255,255,0.05);
+    margin: 28px 0 24px 130px;
+    position: relative;
+  }
+  .section-divider .section-label {
+    position: absolute;
+    top: -9px;
+    left: 0;
+    background: #060608;
+    padding: 0 10px 0 0;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.2);
+  }
+
+  /* API key badge */
+  .key-badge {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.4);
+    margin-top: 3px;
+  }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 32px;
+    flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    color: rgba(255,255,255,0.4);
+    font-weight: 600;
+  }
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 3px;
+    border: 1px solid;
+  }
+
+  /* Phase badge */
+  .phase {
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 20px;
+    margin-bottom: 20px;
+    display: inline-block;
+  }
+</style>
+</head>
+<body>
+
+<h1>AtmosWatch · System Architecture</h1>
+<div class="subtitle">API Call <span>Workflow</span> — Full Flow</div>
+
+<!-- Legend -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.2)"></div>User Trigger</div>
+  <div class="legend-item"><div class="legend-dot" style="background:rgba(0,255,200,0.12);border-color:#00ffc8"></div>API Call</div>
+  <div class="legend-item"><div class="legend-dot" style="background:rgba(255,255,255,0.03);border-color:rgba(255,255,255,0.1)"></div>Process / Logic</div>
+  <div class="legend-item"><div class="legend-dot" style="background:rgba(168,85,247,0.1);border-color:#a855f7"></div>AI (Claude API)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.15)"></div>UI Output</div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- PHASE 1: APP LOAD -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section-divider"><span class="section-label">Phase 1 — App Load & Location</span></div>
+
+<div class="lane">
+  <div class="lane-label" style="color:#00ffc8"><span class="icon">🚀</span><span class="name">App Init</span></div>
+  <div class="nodes">
+    <div class="node trigger">
+      <div class="node-title">Page Load</div>
+      <div class="node-sub">useEffect()</div>
+    </div>
+    <div class="arrow" style="--ac:#00ffc8"></div>
+    <div class="node trigger">
+      <div class="node-title">GPS Request</div>
+      <div class="node-sub">navigator.geolocation<br>.getCurrentPosition()</div>
+    </div>
+    <div class="arrow" style="--ac:#00ffc8"></div>
+    <div class="node api" style="--c:#00ffc8">
+      <div class="node-title">OWM Air Pollution</div>
+      <div class="node-sub">/data/2.5/air_pollution<br>?lat&lon&appid</div>
+      <div class="key-badge">OWM key</div>
+    </div>
+    <div class="arrow" style="--ac:#00ffc8"></div>
+    <div class="node api" style="--c:#00ffc8">
+      <div class="node-title">OWM Reverse Geo</div>
+      <div class="node-sub">/geo/1.0/reverse<br>?lat&lon&limit=1</div>
+      <div class="key-badge">OWM key</div>
+    </div>
+    <div class="arrow" style="--ac:#00ffc8"></div>
+    <div class="node process">
+      <div class="node-title">Parse Response</div>
+      <div class="node-sub">aqi 1–5<br>+ 8 components<br>+ city name</div>
+    </div>
+    <div class="arrow" style="--ac:#00ffc8"></div>
+    <div class="node output">
+      <div class="node-title">Dashboard Ready</div>
+      <div class="node-sub">RadialGauge<br>PollutantRows<br>Stat strip</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- PHASE 2: LOCATION SEARCH -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section-divider"><span class="section-label">Phase 2 — Custom Location Search</span></div>
+
+<div class="lane">
+  <div class="lane-label" style="color:#ffe44d"><span class="icon">📍</span><span class="name">Location Search</span></div>
+  <div class="nodes">
+    <div class="node trigger">
+      <div class="node-title">User Types</div>
+      <div class="node-sub">onChange input</div>
+    </div>
+    <div class="arrow" style="--ac:#ffe44d"></div>
+    <div class="node process">
+      <div class="node-title">Debounce</div>
+      <div class="node-sub">350ms wait</div>
+    </div>
+    <div class="arrow" style="--ac:#ffe44d"></div>
+    <div class="node api" style="--c:#ffe44d">
+      <div class="node-title">WAQI Search</div>
+      <div class="node-sub">/search/?keyword={q}<br>&token=demo</div>
+      <div class="key-badge">WAQI token</div>
+    </div>
+    <div class="arrow" style="--ac:#ffe44d"></div>
+    <div class="node output">
+      <div class="node-title">Dropdown</div>
+      <div class="node-sub">Station name<br>+ AQI badge</div>
+    </div>
+    <div class="arrow" style="--ac:#ffe44d"></div>
+    <div class="node trigger">
+      <div class="node-title">User Selects</div>
+      <div class="node-sub">onClick station</div>
+    </div>
+    <div class="arrow" style="--ac:#ffe44d"></div>
+    <div class="node api" style="--c:#ffe44d">
+      <div class="node-title">WAQI Feed</div>
+      <div class="node-sub">/feed/@{uid}/<br>?token=demo</div>
+      <div class="key-badge">WAQI token</div>
+    </div>
+    <div class="arrow" style="--ac:#ffe44d"></div>
+    <div class="node process">
+      <div class="node-title">realAqiToIndex()</div>
+      <div class="node-sub">0–500 AQI<br>→ 1–5 scale<br>+ iaqi components</div>
+    </div>
+    <div class="arrow" style="--ac:#ffe44d"></div>
+    <div class="node output">
+      <div class="node-title">Full Update</div>
+      <div class="node-sub">All views refresh<br>with real data</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- PHASE 3: WORKOUT ADJUSTER -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section-divider"><span class="section-label">Phase 3 — Workout Adjuster</span></div>
+
+<div class="lane">
+  <div class="lane-label" style="color:#ff8c42"><span class="icon">⚙</span><span class="name">Workout Plan</span></div>
+  <div class="nodes">
+    <div class="node trigger">
+      <div class="node-title">Select Workout</div>
+      <div class="node-sub">type + distance</div>
+    </div>
+    <div class="arrow" style="--ac:#ff8c42"></div>
+    <div class="node process">
+      <div class="node-title">getWorkout<br>Adjustment()</div>
+      <div class="node-sub">AQI → tier 0–4<br>reduce dist/pace</div>
+    </div>
+    <div class="arrow" style="--ac:#ff8c42"></div>
+    <div class="node output">
+      <div class="node-title">Plan Output</div>
+      <div class="node-sub">Adjusted km<br>pace, indoor alt</div>
+    </div>
+    <div class="arrow" style="--ac:#ff8c42"></div>
+    <div class="node trigger">
+      <div class="node-title">"Why?" Click</div>
+      <div class="node-sub">fetchWhy()</div>
+    </div>
+    <div class="arrow" style="--ac:#a855f7"></div>
+    <div class="node ai">
+      <div class="node-title">Claude API</div>
+      <div class="node-sub">/v1/messages<br>claude-sonnet-4<br>max_tokens: 256</div>
+      <div class="key-badge">Auto (Claude.ai)</div>
+    </div>
+    <div class="arrow" style="--ac:#a855f7"></div>
+    <div class="node process">
+      <div class="node-title">Cache Result</div>
+      <div class="node-sub">useRef cache<br>key: aqi-workoutId</div>
+    </div>
+    <div class="arrow" style="--ac:#a855f7"></div>
+    <div class="node output">
+      <div class="node-title">Physiology Text</div>
+      <div class="node-sub">3 sentences on<br>lung / VO₂ / inflammation</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- PHASE 4: TRAINING WINDOWS -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section-divider"><span class="section-label">Phase 4 — Safe Training Windows</span></div>
+
+<div class="lane">
+  <div class="lane-label" style="color:#00aaff"><span class="icon">🕐</span><span class="name">Windows</span></div>
+  <div class="nodes">
+    <div class="node trigger">
+      <div class="node-title">Tab Opens</div>
+      <div class="node-sub">useEffect()<br>userLat/Lng ready</div>
+    </div>
+    <div class="arrow" style="--ac:#00aaff"></div>
+    <div class="node api" style="--c:#00aaff">
+      <div class="node-title">Open-Meteo</div>
+      <div class="node-sub">/air-quality<br>hourly=pm2_5<br>european_aqi<br>forecast_days=2</div>
+      <div class="key-badge">No key needed</div>
+    </div>
+    <div class="arrow" style="--ac:#00aaff"></div>
+    <div class="node api" style="--c:#00aaff">
+      <div class="node-title">OWM Forecast</div>
+      <div class="node-sub">/data/2.5/forecast<br>3h blocks<br>temp,hum,wind</div>
+      <div class="key-badge">OWM key</div>
+    </div>
+    <div class="arrow" style="--ac:#00aaff"></div>
+    <div class="node process">
+      <div class="node-title">scoreHour()</div>
+      <div class="node-sub">100 − aqi×0.4<br>±heat/hum/wind<br>−rush hour</div>
+    </div>
+    <div class="arrow" style="--ac:#00aaff"></div>
+    <div class="node process">
+      <div class="node-title">Top 3 Hours</div>
+      <div class="node-sub">Sort by score<br>flag BEST badge</div>
+    </div>
+    <div class="arrow" style="--ac:#00aaff"></div>
+    <div class="node api" style="--c:#00aaff">
+      <div class="node-title">Open-Meteo</div>
+      <div class="node-sub">past_days=7<br>for last-week<br>comparison</div>
+      <div class="key-badge">No key needed</div>
+    </div>
+    <div class="arrow" style="--ac:#00aaff"></div>
+    <div class="node output">
+      <div class="node-title">24h Bar Chart</div>
+      <div class="node-sub">+ 7-day grid<br>+ best banner<br>+ hover tooltip</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- PHASE 5: ROUTE PLANNER -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section-divider"><span class="section-label">Phase 5 — Route Planner</span></div>
+
+<div class="lane">
+  <div class="lane-label" style="color:#ff4444"><span class="icon">🗺</span><span class="name">Routes</span></div>
+  <div class="nodes">
+    <div class="node trigger">
+      <div class="node-title">Tab Opens</div>
+      <div class="node-sub">Leaflet CDN<br>loaded dynamically</div>
+    </div>
+    <div class="arrow" style="--ac:#ff4444"></div>
+    <div class="node api" style="--c:#ff4444">
+      <div class="node-title">Overpass API</div>
+      <div class="node-sub">POST query<br>footway/path/park<br>within 3km</div>
+      <div class="key-badge">No key needed</div>
+    </div>
+    <div class="arrow" style="--ac:#ff4444"></div>
+    <div class="node api" style="--c:#ff4444">
+      <div class="node-title">OWM Weather</div>
+      <div class="node-sub">/weather<br>wind.deg<br>bearing</div>
+      <div class="key-badge">OWM key</div>
+    </div>
+    <div class="arrow" style="--ac:#ff4444"></div>
+    <div class="node trigger">
+      <div class="node-title">Set START/END</div>
+      <div class="node-sub">map.on("click")<br>or auto-loop</div>
+    </div>
+    <div class="arrow" style="--ac:#ff4444"></div>
+    <div class="node api" style="--c:#ff4444">
+      <div class="node-title">OSRM Routing</div>
+      <div class="node-sub">/route/v1/foot<br>start;end<br>geojson coords</div>
+      <div class="key-badge">No key needed</div>
+    </div>
+    <div class="arrow" style="--ac:#ff4444"></div>
+    <div class="node api" style="--c:#ff4444">
+      <div class="node-title">Open-Elevation</div>
+      <div class="node-sub">/api/v1/lookup<br>detect dips >20m<br>pollution traps</div>
+      <div class="key-badge">No key needed</div>
+    </div>
+    <div class="arrow" style="--ac:#ff4444"></div>
+    <div class="node process">
+      <div class="node-title">Score Segments</div>
+      <div class="node-sub">highway +30<br>park −20<br>water −15</div>
+    </div>
+    <div class="arrow" style="--ac:#ff4444"></div>
+    <div class="node output">
+      <div class="node-title">Dual Routes</div>
+      <div class="node-sub">Gray=shortest<br>Accent=cleanest<br>+ comparison panel</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- PHASE 6: TRAINING PLANNER -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section-divider"><span class="section-label">Phase 6 — Training Block Planner</span></div>
+
+<div class="lane">
+  <div class="lane-label" style="color:#cc44ff"><span class="icon">📅</span><span class="name">Planner</span></div>
+  <div class="nodes">
+    <div class="node trigger">
+      <div class="node-title">Tab Opens</div>
+      <div class="node-sub">Phase selected<br>BASE/BUILD/PEAK/TAPER</div>
+    </div>
+    <div class="arrow" style="--ac:#cc44ff"></div>
+    <div class="node api" style="--c:#cc44ff">
+      <div class="node-title">Open-Meteo</div>
+      <div class="node-sub">forecast_days=7<br>european_aqi<br>hourly</div>
+      <div class="key-badge">No key needed</div>
+    </div>
+    <div class="arrow" style="--ac:#cc44ff"></div>
+    <div class="node api" style="--c:#cc44ff">
+      <div class="node-title">Open-Meteo</div>
+      <div class="node-sub">past_days=30<br>historical AQI<br>air debt calc</div>
+      <div class="key-badge">No key needed</div>
+    </div>
+    <div class="arrow" style="--ac:#cc44ff"></div>
+    <div class="node process">
+      <div class="node-title">Air Debt</div>
+      <div class="node-sub">Σ max(0, AQI−100)<br>30 days<br>0/200/500 bands</div>
+    </div>
+    <div class="arrow" style="--ac:#cc44ff"></div>
+    <div class="node output">
+      <div class="node-title">Calendar Grid</div>
+      <div class="node-sub">35-day view<br>AQI + workout dot<br>per cell</div>
+    </div>
+    <div class="arrow" style="--ac:#a855f7"></div>
+    <div class="node trigger">
+      <div class="node-title">Reschedule<br>Click</div>
+      <div class="node-sub">reschedule()</div>
+    </div>
+    <div class="arrow" style="--ac:#a855f7"></div>
+    <div class="node ai">
+      <div class="node-title">Claude API</div>
+      <div class="node-sub">/v1/messages<br>plan+forecast<br>+debt+phase</div>
+      <div class="key-badge">Auto (Claude.ai)</div>
+    </div>
+    <div class="arrow" style="--ac:#a855f7"></div>
+    <div class="node output">
+      <div class="node-title">AI Plan</div>
+      <div class="node-sub">Before/after<br>side by side<br>+ AQI context</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- PHASE 7: GLOBAL MAP -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section-divider"><span class="section-label">Phase 7 — Global AQI Map</span></div>
+
+<div class="lane">
+  <div class="lane-label" style="color:#00ffc8"><span class="icon">🌍</span><span class="name">Map</span></div>
+  <div class="nodes">
+    <div class="node trigger">
+      <div class="node-title">Map Tab</div>
+      <div class="node-sub">Leaflet CDN<br>script injected</div>
+    </div>
+    <div class="arrow" style="--ac:#00ffc8"></div>
+    <div class="node api" style="--c:#00ffc8">
+      <div class="node-title">OSM Tiles</div>
+      <div class="node-sub">tile.openstreet<br>map.org/{z}/{x}/{y}<br>.png</div>
+      <div class="key-badge">No key needed</div>
+    </div>
+    <div class="arrow" style="--ac:#00ffc8"></div>
+    <div class="node api" style="--c:#00ffc8">
+      <div class="node-title">WAQI Tile Layer</div>
+      <div class="node-sub">tiles.waqi.info<br>/usepa-aqi<br>/{z}/{x}/{y}.png</div>
+      <div class="key-badge">WAQI token</div>
+    </div>
+    <div class="arrow" style="--ac:#00ffc8"></div>
+    <div class="node trigger">
+      <div class="node-title">Pan / Zoom</div>
+      <div class="node-sub">map.on<br>("moveend")<br>throttle 400ms</div>
+    </div>
+    <div class="arrow" style="--ac:#00ffc8"></div>
+    <div class="node api" style="--c:#00ffc8">
+      <div class="node-title">WAQI Bounds</div>
+      <div class="node-sub">/map/bounds<br>?latlng=s,w,n,e<br>&token</div>
+      <div class="key-badge">WAQI token</div>
+    </div>
+    <div class="arrow" style="--ac:#00ffc8"></div>
+    <div class="node output">
+      <div class="node-title">Station Markers</div>
+      <div class="node-sub">CircleMarker<br>color by AQI<br>popup on click</div>
+    </div>
+    <div class="arrow" style="--ac:#ffe44d"></div>
+    <div class="node trigger">
+      <div class="node-title">Hover Country</div>
+      <div class="node-sub">mousemove<br>debounce 1.2s</div>
+    </div>
+    <div class="arrow" style="--ac:#ffe44d"></div>
+    <div class="node api" style="--c:#ffe44d">
+      <div class="node-title">Nominatim</div>
+      <div class="node-sub">/reverse?lat&lon<br>→ country name<br>cached ±0.5°</div>
+      <div class="key-badge">No key needed</div>
+    </div>
+    <div class="arrow" style="--ac:#ffe44d"></div>
+    <div class="node api" style="--c:#ffe44d">
+      <div class="node-title">WAQI Search</div>
+      <div class="node-sub">/search?keyword<br>=country<br>top 5 cities</div>
+      <div class="key-badge">WAQI token</div>
+    </div>
+    <div class="arrow" style="--ac:#a855f7"></div>
+    <div class="node ai">
+      <div class="node-title">Claude API</div>
+      <div class="node-sub">/v1/messages<br>country analysis<br>max_tokens:512</div>
+      <div class="key-badge">Auto (Claude.ai)</div>
+    </div>
+    <div class="arrow" style="--ac:#a855f7"></div>
+    <div class="node output">
+      <div class="node-title">Side Panel</div>
+      <div class="node-sub">Flag + AQI rank<br>pollutants<br>solutions</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- API KEY SUMMARY -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="section-divider"><span class="section-label">API Keys Reference</span></div>
+
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:4px;padding-left:130px">
+  <div style="background:rgba(0,255,200,0.06);border:1px solid rgba(0,255,200,0.2);border-radius:12px;padding:14px">
+    <div style="font-size:10px;font-weight:800;color:#00ffc8;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px">OpenWeatherMap</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(255,255,255,0.35);word-break:break-all;margin-bottom:6px">61139cc72b4fb31229baa227db1bc59e</div>
+    <div style="font-size:9px;color:rgba(255,255,255,0.3)">Air pollution · Forecast · Reverse geocode · Wind</div>
+  </div>
+  <div style="background:rgba(255,228,77,0.06);border:1px solid rgba(255,228,77,0.2);border-radius:12px;padding:14px">
+    <div style="font-size:10px;font-weight:800;color:#ffe44d;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px">WAQI</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(255,255,255,0.35);margin-bottom:6px">demo <span style="opacity:0.4">or</span> VITE_WAQI_TOKEN</div>
+    <div style="font-size:9px;color:rgba(255,255,255,0.3)">Station search · Feed · Map tiles · Bounds</div>
+  </div>
+  <div style="background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.2);border-radius:12px;padding:14px">
+    <div style="font-size:10px;font-weight:800;color:#c084fc;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px">Claude API</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(255,255,255,0.35);margin-bottom:6px">Auto-handled by Claude.ai</div>
+    <div style="font-size:9px;color:rgba(255,255,255,0.3)">Workout explanation · Reschedule · Map panel</div>
+  </div>
+  <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px">
+    <div style="font-size:10px;font-weight:800;color:rgba(255,255,255,0.5);letter-spacing:0.15em;text-transform:uppercase;margin-bottom:8px">No Key Required</div>
+    <div style="font-size:9px;color:rgba(255,255,255,0.3);line-height:1.7">Open-Meteo · Overpass OSM<br>OSRM Routing · Open-Elevation<br>Nominatim · OSM Tiles</div>
+  </div>
+</div>
+
+<div style="margin-top:40px;padding-left:130px;font-size:9px;color:rgba(255,255,255,0.15);font-family:'JetBrains Mono',monospace;letter-spacing:0.1em">
+  ATMOSWATCH · 9 FEATURES · 12 APIS · 3 REQUIRE KEYS · 9 VIEWS
+</div>
+
+</body>
+</html>
