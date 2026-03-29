@@ -1,8 +1,8 @@
+/// <reference types="vite/client" />
 // ── API Keys ────────────────────────────────────────────────────────
 export const WAQI_TOKEN = import.meta.env.VITE_WAQI_TOKEN || 'demo';
 export const OWM_KEY      = import.meta.env.VITE_OWM_KEY      || '';
 export const GEMINI_KEY   = import.meta.env.VITE_GEMINI_KEY   || '';
-
 // ── AQI Level Config ────────────────────────────────────────────────
 export const AQI_LEVELS: Record<number, { label: string; sub: string; color: string; glow: string; advice: string; icon: string; bg: string }> = {
   1: { label:'PRISTINE',  sub:'Zero restrictions',   color:'#00ffc8', glow:'rgba(0,255,200,0.15)',   bg:'rgba(0,255,200,0.04)',   advice:'Air is pristine. All activities cleared — push your limits today.', icon:'◎' },
