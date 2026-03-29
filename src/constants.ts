@@ -1,7 +1,7 @@
 // ── API Keys ────────────────────────────────────────────────────────
-export const WAQI_TOKEN = import.meta.env.VITE_WAQI_TOKEN || 'demo';
-export const OWM_KEY    = import.meta.env.VITE_OWM_KEY    || '';
-export const ANTHROPIC_KEY = import.meta.env.VITE_ANTHROPIC_KEY || '';
+export const WAQI_TOKEN   = import.meta.env.VITE_WAQI_TOKEN   || 'demo';
+export const OWM_KEY      = import.meta.env.VITE_OWM_KEY      || '';
+export const GEMINI_KEY   = import.meta.env.VITE_GEMINI_KEY   || '';
 
 // ── AQI Level Config ────────────────────────────────────────────────
 export const AQI_LEVELS: Record<number, { label: string; sub: string; color: string; glow: string; advice: string; icon: string; bg: string }> = {
@@ -12,7 +12,7 @@ export const AQI_LEVELS: Record<number, { label: string; sub: string; color: str
   5: { label:'HAZARDOUS', sub:'Emergency conditions', color:'#cc44ff', glow:'rgba(204,68,255,0.15)',  bg:'rgba(204,68,255,0.04)',  advice:'Air quality emergency. No outdoor activity. All exercise must be indoor.', icon:'●' },
 };
 
-// ── Pollutant Info ────────────────────────────────────────────────── 
+// ── Pollutant Info ──────────────────────────────────────────────────
 export const POLLUTANT_INFO: Record<string, { name: string; unit: string; safe: number; icon: string; desc: string }> = {
   co:    { name:'Carbon Monoxide',  unit:'μg/m³', safe:4400, icon:'CO',   desc:'Incomplete combustion in vehicles and heating. Reduces blood oxygen capacity.' },
   no:    { name:'Nitric Oxide',     unit:'μg/m³', safe:40,   icon:'NO',   desc:'Primary combustion pollutant from traffic and industrial sources.' },
@@ -24,16 +24,16 @@ export const POLLUTANT_INFO: Record<string, { name: string; unit: string; safe: 
   nh3:   { name:'Ammonia',          unit:'μg/m³', safe:200,  icon:'NH₃',  desc:'Agricultural and industrial emissions. Respiratory tract irritant at high levels.' },
 };
 
-// ── Workout Types ─────────────────────────────────────────────────── 
+// ── Workout Types ───────────────────────────────────────────────────
 export const WORKOUT_TYPES = [
-  { id:'easy_run',  label:'Easy Run',       icon:'🏃', unit:'km',  intensity:'low',    outdoor:true  },
-  { id:'tempo_run', label:'Tempo Run',      icon:'⚡', unit:'km',  intensity:'medium', outdoor:true  },
-  { id:'intervals', label:'Intervals',      icon:'🔥', unit:'min', intensity:'high',   outdoor:true  },
-  { id:'long_run',  label:'Long Run',       icon:'🛣️', unit:'km',  intensity:'medium', outdoor:true  },
-  { id:'cycle',     label:'Cycling',        icon:'🚴', unit:'km',  intensity:'medium', outdoor:true  },
-  { id:'hiit',      label:'HIIT',           icon:'💥', unit:'min', intensity:'high',   outdoor:false },
-  { id:'swim',      label:'Swim',           icon:'🏊', unit:'min', intensity:'medium', outdoor:false },
-  { id:'gym',       label:'Gym',            icon:'🏋️', unit:'min', intensity:'medium', outdoor:false },
+  { id:'easy_run',  label:'Easy Run',  icon:'🏃', unit:'km',  intensity:'low',    outdoor:true  },
+  { id:'tempo_run', label:'Tempo Run', icon:'⚡', unit:'km',  intensity:'medium', outdoor:true  },
+  { id:'intervals', label:'Intervals', icon:'🔥', unit:'min', intensity:'high',   outdoor:true  },
+  { id:'long_run',  label:'Long Run',  icon:'🛣️', unit:'km',  intensity:'medium', outdoor:true  },
+  { id:'cycle',     label:'Cycling',   icon:'🚴', unit:'km',  intensity:'medium', outdoor:true  },
+  { id:'hiit',      label:'HIIT',      icon:'💥', unit:'min', intensity:'high',   outdoor:false },
+  { id:'swim',      label:'Swim',      icon:'🏊', unit:'min', intensity:'medium', outdoor:false },
+  { id:'gym',       label:'Gym',       icon:'🏋️', unit:'min', intensity:'medium', outdoor:false },
 ];
 
 export const GYM_ALTERNATIVES: Record<string, string[]> = {
@@ -47,17 +47,17 @@ export const GYM_ALTERNATIVES: Record<string, string[]> = {
   gym:       ['Proceed as planned indoors','Focus on strength training'],
 };
 
-// ── Health Conditions ─────────────────────────────────────────────── 
+// ── Health Conditions ───────────────────────────────────────────────
 export const HEALTH_CONDITIONS = [
-  { id:'asthma',        label:'Asthma',        icon:'🫁', riskMult:1.8 },
-  { id:'cardiovascular',label:'Heart Condition',icon:'❤️', riskMult:2.0 },
-  { id:'pregnancy',     label:'Pregnant',       icon:'🤰', riskMult:1.6 },
-  { id:'elderly',       label:'Age 65+',        icon:'👴', riskMult:1.5 },
-  { id:'child',         label:'Under 12',       icon:'👶', riskMult:1.4 },
-  { id:'diabetes',      label:'Diabetes',       icon:'💉', riskMult:1.3 },
+  { id:'asthma',         label:'Asthma',         icon:'🫁', riskMult:1.8 },
+  { id:'cardiovascular', label:'Heart Condition', icon:'❤️', riskMult:2.0 },
+  { id:'pregnancy',      label:'Pregnant',        icon:'🤰', riskMult:1.6 },
+  { id:'elderly',        label:'Age 65+',         icon:'👴', riskMult:1.5 },
+  { id:'child',          label:'Under 12',        icon:'👶', riskMult:1.4 },
+  { id:'diabetes',       label:'Diabetes',        icon:'💉', riskMult:1.3 },
 ];
 
-// ── Helper Functions ──────────────────────────────────────────────── 
+// ── Helper Functions ────────────────────────────────────────────────
 export function waqiAqiColor(aqi: number): string {
   if (aqi <= 50)  return '#00e57a';
   if (aqi <= 100) return '#ffe033';
@@ -94,9 +94,7 @@ export function scoreHour(aqi: number, temp: number, humidity: number, windSpeed
   if (humidity < 25) s -= 6;
   if (windSpeed > 20) s -= 8;
   else if (windSpeed > 10) s += 4;
-  // Peak traffic hours
   if ((hour >= 7 && hour <= 9) || (hour >= 17 && hour <= 19)) s -= 8;
-  // Dawn/dusk bonus
   if ((hour >= 5 && hour <= 7) || (hour >= 19 && hour <= 21)) s += 5;
   return Math.max(0, Math.min(100, Math.round(s)));
 }
@@ -110,15 +108,20 @@ export function scoreColor(s: number): string {
 
 export function countryFlag(name: string): string {
   const flags: Record<string,string> = {
-    india:'🇮🇳',china:'🇨🇳','united states':'🇺🇸',usa:'🇺🇸','united kingdom':'🇬🇧',uk:'🇬🇧',
-    germany:'🇩🇪',france:'🇫🇷',japan:'🇯🇵',australia:'🇦🇺',canada:'🇨🇦',brazil:'🇧🇷',
-    russia:'🇷🇺',indonesia:'🇮🇩',pakistan:'🇵🇰',bangladesh:'🇧🇩',nigeria:'🇳🇬',mexico:'🇲🇽',
-    'south korea':'🇰🇷',italy:'🇮🇹',spain:'🇪🇸',turkey:'🇹🇷',thailand:'🇹🇭',vietnam:'🇻🇳',
-    poland:'🇵🇱',ukraine:'🇺🇦',colombia:'🇨🇴',egypt:'🇪🇬',iran:'🇮🇷',malaysia:'🇲🇾',
-    nepal:'🇳🇵',singapore:'🇸🇬',philippines:'🇵🇭','south africa':'🇿🇦',argentina:'🇦🇷',
-    chile:'🇨🇱',peru:'🇵🇪',kenya:'🇰🇪',ethiopia:'🇪🇹',tanzania:'🇹🇿',ghana:'🇬🇭',
-    sweden:'🇸🇪',norway:'🇳🇴',denmark:'🇩🇰',finland:'🇫🇮',netherlands:'🇳🇱',belgium:'🇧🇪',
-    switzerland:'🇨🇭',austria:'🇦🇹',portugal:'🇵🇹',greece:'🇬🇷',czechia:'🇨🇿',hungary:'🇭🇺',
+    india:'🇮🇳', china:'🇨🇳', 'united states':'🇺🇸', usa:'🇺🇸', 'united kingdom':'🇬🇧', uk:'🇬🇧',
+    germany:'🇩🇪', france:'🇫🇷', japan:'🇯🇵', australia:'🇦🇺', canada:'🇨🇦', brazil:'🇧🇷',
+    russia:'🇷🇺', indonesia:'🇮🇩', pakistan:'🇵🇰', bangladesh:'🇧🇩', nigeria:'🇳🇬', niger:'🇳🇪',
+    mexico:'🇲🇽', 'south korea':'🇰🇷', italy:'🇮🇹', spain:'🇪🇸', turkey:'🇹🇷', thailand:'🇹🇭',
+    vietnam:'🇻🇳', poland:'🇵🇱', ukraine:'🇺🇦', colombia:'🇨🇴', egypt:'🇪🇬', iran:'🇮🇷',
+    malaysia:'🇲🇾', nepal:'🇳🇵', singapore:'🇸🇬', philippines:'🇵🇭', 'south africa':'🇿🇦',
+    argentina:'🇦🇷', chile:'🇨🇱', peru:'🇵🇪', kenya:'🇰🇪', ethiopia:'🇪🇹', tanzania:'🇹🇿',
+    ghana:'🇬🇭', sweden:'🇸🇪', norway:'🇳🇴', denmark:'🇩🇰', finland:'🇫🇮', netherlands:'🇳🇱',
+    belgium:'🇧🇪', switzerland:'🇨🇭', austria:'🇦🇹', portugal:'🇵🇹', greece:'🇬🇷',
+    czechia:'🇨🇿', hungary:'🇭🇺', mali:'🇲🇱', chad:'🇹🇩', algeria:'🇩🇿', libya:'🇱🇾',
+    sudan:'🇸🇩', angola:'🇦🇴', mozambique:'🇲🇿', zimbabwe:'🇿🇼', zambia:'🇿🇲',
+    cameroon:'🇨🇲', senegal:'🇸🇳', uganda:'🇺🇬', morocco:'🇲🇦', tunisia:'🇹🇳',
+    iraq:'🇮🇶', 'saudi arabia':'🇸🇦', myanmar:'🇲🇲', 'sri lanka':'🇱🇰',
+    cambodia:'🇰🇭', israel:'🇮🇱', jordan:'🇯🇴',
   };
   const key = name.toLowerCase();
   for (const [k, v] of Object.entries(flags)) if (key.includes(k)) return v;

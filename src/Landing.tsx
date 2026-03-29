@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEffect, useRef, useState } from 'react';
-import { AQI_LEVELS, waqiAqiColor } from './constants';
+import { AQI_LEVELS, waqiAqiColor, waqiAqiLabel } from './constants';
 
 function GlitchText({ text }: { text: string }) {
   const [glitch, setGlitch] = useState(false);
@@ -199,6 +199,7 @@ export default function Landing({ onEnter }: LandingProps) {
             </motion.button>
             <motion.button
               whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+              onClick={onEnter}
               style={{
                 padding: '14px 36px', borderRadius: 14, fontSize: 15, fontWeight: 600,
                 background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',

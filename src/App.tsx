@@ -3,12 +3,23 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence, animate } from 'framer-motion';
 import Landing from './Landing';
 import {
-  WAQI_TOKEN, OWM_KEY, ANTHROPIC_KEY,
+  WAQI_TOKEN, OWM_KEY, GEMINI_KEY,
   AQI_LEVELS, POLLUTANT_INFO, WORKOUT_TYPES, GYM_ALTERNATIVES,
   HEALTH_CONDITIONS, MOCK_DATA,
   waqiAqiColor, waqiAqiLabel, realAqiToIndex, scoreHour, scoreColor, countryFlag,
 } from './constants';
 
+
+// ── Gemini AI helper (free tier — get key at aistudio.google.com) ────────────
+async function geminiAI(prompt) {
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) }
+  );
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message || 'Gemini error');
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+}
 // ─── CSS-in-JS theme vars ───────────────────────────────────────────────────
 const S = {
   bg: '#060608',
@@ -149,29 +160,61 @@ function LocationSearch({ theme, onLocationSelect, onResetLocation }) {
   };
 
   const selectSuggestion = async (suggestion) => {
-    setIsOpen(false); setQuery(suggestion.name);
-    setIsFetching(true); setError('');
-    try {
-      const res = await fetch(`https://api.waqi.info/feed/@${suggestion.uid}/?token=${WAQI_TOKEN}`);
-      const json = await res.json();
-      if (json.status !== 'ok') throw new Error('unavailable');
-      const d = json.data;
-      const iaqi = d.iaqi || {};
-      const components = {
-        co: iaqi.co?.v ?? 0, no: iaqi.no?.v ?? 0,
-        no2: iaqi.no2?.v ?? iaqi.nox?.v ?? 0, o3: iaqi.o3?.v ?? 0,
-        so2: iaqi.so2?.v ?? 0, pm2_5: iaqi.pm25?.v ?? 0,
-        pm10: iaqi.pm10?.v ?? 0, nh3: iaqi.nh3?.v ?? 0,
-      };
-      const geo = d.city?.geo || suggestion.geo || [null, null];
-      onLocationSelect({
-        locationName: suggestion.name, lat: geo[0], lng: geo[1],
-        data: { main: { aqi: realAqiToIndex(d.aqi) }, components, _realAqi: d.aqi, _waqiData: d },
-      });
-    } catch { setError('Could not load data for this station. Try another.'); }
-    setIsFetching(false);
-  };
+  setIsOpen(false); setQuery(suggestion.name);
+  setIsFetching(true); setError('');
+  try {
+    const res = await fetch(`https://api.waqi.info/feed/@${suggestion.uid}/?token=${WAQI_TOKEN}`);
+    const json = await res.json();
+    if (json.status !== 'ok') throw new Error('unavailable');
+    const d = json.data;
+    const iaqi = d.iaqi || {};
+    const components = {
+      co: iaqi.co?.v ?? 0, no: iaqi.no?.v ?? 0,
+      no2: iaqi.no2?.v ?? iaqi.nox?.v ?? 0, o3: iaqi.o3?.v ?? 0,
+      so2: iaqi.so2?.v ?? 0, pm2_5: iaqi.pm25?.v ?? 0,
+      pm10: iaqi.pm10?.v ?? 0, nh3: iaqi.nh3?.v ?? 0,
+    };
 
+    // ── FIX: robustly get coordinates ──────────────────────────────
+    let lat = null, lng = null;
+
+    // 1. Try WAQI feed city geo
+    if (d.city?.geo?.[0] != null && d.city?.geo?.[1] != null) {
+      lat = d.city.geo[0]; lng = d.city.geo[1];
+    }
+    // 2. Try suggestion.geo from search results
+    else if (suggestion.geo?.[0] != null && suggestion.geo?.[1] != null) {
+      lat = suggestion.geo[0]; lng = suggestion.geo[1];
+    }
+    // 3. Fallback: geocode the station name via Nominatim
+    else {
+      try {
+        const geoRes = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(suggestion.name)}&format=json&limit=1`
+        );
+        const geoData = await geoRes.json();
+        if (geoData?.[0]) {
+          lat = parseFloat(geoData[0].lat);
+          lng = parseFloat(geoData[0].lon);
+        }
+      } catch { /* ignore */ }
+    }
+    // ── END FIX ───────────────────────────────────────────────────
+
+    onLocationSelect({
+      locationName: suggestion.name,
+      lat,
+      lng,
+      data: {
+        main: { aqi: realAqiToIndex(d.aqi) },
+        components,
+        _realAqi: d.aqi,
+        _waqiData: d,
+      },
+    });
+  } catch { setError('Could not load data for this station. Try another.'); }
+  setIsFetching(false);
+};
   const inp: React.CSSProperties = {
     width: '100%', padding: '10px 36px 10px 36px', borderRadius: 12, fontSize: 13,
     background: 'rgba(255,255,255,0.04)', border: `1px solid ${isOpen ? theme.color + '55' : 'rgba(255,255,255,0.08)'}`,
@@ -421,9 +464,7 @@ function WorkoutAdjuster({ aqi, theme }) {
     setWhyLoading(true); setWhyOpen(true);
     try {
       const prompt = `You are a sports physiologist. In exactly 3 concise sentences, explain the physiological reason why AQI index level ${aqi} (out of 5) affects performance for someone doing a ${workout.label}. Be specific about lung function, oxygen uptake, and inflammation. No bullet points.`;
-      const res = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 256, messages: [{ role: 'user', content: prompt }] }) });
-      const data = await res.json();
-      const text = data.content?.[0]?.text;
+      const text = await geminiAI(prompt);
       if (text?.length > 20) { cacheRef.current[key] = text; setWhyText(text); } else throw new Error('empty');
     } catch {
       const fallback = `At AQI level ${aqi}, fine particulate matter penetrates the lower respiratory tract, increasing airway resistance and reducing effective VO₂max by up to 10-15%. The inflammatory response triggered by PM₂.₅ elevates cytokine levels, increasing cardiac load during ${workout.label}. This combination of reduced oxygen delivery and cardiovascular stress makes sustained effort measurably harder and potentially harmful.`;
@@ -1096,8 +1137,7 @@ function TrainingBlockPlanner({ theme, userLat, userLng }) {
       const planStr = activeWeekPlan.map(w => `${w.d}: ${w.s}${w.km ? `, ${w.km}km` : ''} (${w.i})`).join('; ');
       const fcStr = forecastAqi.map((a, i) => { const d = new Date(today); d.setDate(d.getDate() + i); return `${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]}: AQI ${a}`; }).join(', ');
       const prompt = `Training plan: ${planStr}. 7-day AQI forecast: ${fcStr}. Air debt score: ${airDebt}. Phase: ${parsedCustom ? 'Custom' : phase}. Reschedule sessions to lowest-AQI days. Keep total volume intact. Return exactly day-by-day, one line each as "Day: Session (intensity, km/min)". Be concise, no preamble or explanation.`;
-      const res = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 512, messages: [{ role: 'user', content: prompt }] }) });
-      const dat = await res.json(); const planText = dat.content?.[0]?.text;
+      const planText = await geminiAI(prompt);
       if (!planText || planText.length < 10) throw new Error('empty');
       setAiPlan(planText);
     } catch {
@@ -1296,7 +1336,102 @@ function TrainingBlockPlanner({ theme, userLat, userLng }) {
   );
 }
 
-// ── Global AQI Map (fixed country hover → correct city data) ────────────────
+// ── Country bounding boxes for geo-filtered WAQI station lookup ──────────────
+const COUNTRY_BOUNDS: Record<string, [number, number, number, number]> = {
+  // [south, west, north, east]
+  "india": [8.4, 68.7, 37.6, 97.4],
+  "china": [18.2, 73.5, 53.6, 134.8],
+  "united states": [24.5, -124.8, 49.4, -66.9],
+  "usa": [24.5, -124.8, 49.4, -66.9],
+  "united kingdom": [49.9, -8.2, 60.9, 1.8],
+  "uk": [49.9, -8.2, 60.9, 1.8],
+  "germany": [47.3, 5.9, 55.1, 15.0],
+  "france": [42.3, -4.8, 51.1, 8.2],
+  "japan": [24.0, 122.9, 45.5, 153.0],
+  "australia": [-43.7, 113.3, -10.7, 153.6],
+  "brazil": [-33.8, -73.9, 5.3, -34.7],
+  "canada": [41.7, -141.0, 83.1, -52.6],
+  "russia": [41.2, 19.6, 81.9, 180.0],
+  "indonesia": [-11.0, 95.0, 5.9, 141.0],
+  "pakistan": [23.6, 60.9, 37.1, 77.8],
+  "bangladesh": [20.7, 88.0, 26.6, 92.7],
+  "nigeria": [4.3, 2.7, 13.9, 14.7],
+  "niger": [11.7, 0.2, 23.5, 15.9],
+  "mexico": [14.5, -117.1, 32.7, -86.7],
+  "south korea": [33.1, 124.6, 38.6, 129.6],
+  "italy": [36.6, 6.6, 47.1, 18.5],
+  "spain": [36.0, -9.3, 43.8, 3.3],
+  "turkey": [36.0, 26.0, 42.1, 44.8],
+  "thailand": [5.6, 97.3, 20.5, 105.6],
+  "vietnam": [8.4, 102.1, 23.4, 109.5],
+  "poland": [49.0, 14.1, 54.8, 24.1],
+  "ukraine": [44.4, 22.1, 52.4, 40.2],
+  "colombia": [-4.2, -79.0, 12.5, -66.9],
+  "egypt": [22.0, 24.7, 31.7, 37.1],
+  "iran": [25.1, 44.0, 39.8, 63.3],
+  "malaysia": [0.9, 99.7, 7.4, 119.3],
+  "nepal": [26.4, 80.1, 30.4, 88.2],
+  "singapore": [1.1, 103.6, 1.5, 104.1],
+  "philippines": [4.6, 116.9, 21.1, 126.6],
+  "south africa": [-34.8, 16.5, -22.1, 32.9],
+  "argentina": [-55.1, -73.6, -21.8, -53.6],
+  "kenya": [-4.7, 33.9, 4.6, 41.9],
+  "sweden": [55.3, 11.1, 69.1, 24.2],
+  "norway": [57.9, 4.6, 71.2, 31.1],
+  "netherlands": [50.8, 3.4, 53.5, 7.2],
+  "switzerland": [45.8, 5.9, 47.8, 10.5],
+  "austria": [46.4, 9.5, 49.0, 17.2],
+  "greece": [34.9, 19.4, 42.0, 29.6],
+  "portugal": [36.8, -9.5, 42.1, -6.2],
+  "belgium": [49.5, 2.5, 51.5, 6.4],
+  "denmark": [54.6, 8.1, 57.7, 15.2],
+  "finland": [59.8, 19.1, 70.1, 31.6],
+  "chile": [-55.9, -75.6, -17.5, -66.4],
+  "peru": [-18.4, -81.3, -0.1, -68.7],
+  "ghana": [4.7, -3.3, 11.2, 1.2],
+  "ethiopia": [3.4, 33.0, 14.9, 48.0],
+  "tanzania": [-11.7, 29.3, -1.0, 40.4],
+  "mali": [10.1, -5.5, 25.0, 4.3],
+  "chad": [7.4, 13.5, 23.5, 24.0],
+  "algeria": [18.9, -8.7, 37.1, 12.0],
+  "libya": [19.5, 9.4, 33.2, 25.2],
+  "sudan": [8.7, 21.8, 22.2, 38.6],
+  "angola": [-18.0, 11.7, -4.4, 24.1],
+  "mozambique": [-26.9, 30.2, -10.5, 40.9],
+  "zimbabwe": [-22.4, 25.2, -15.6, 33.1],
+  "zambia": [-18.1, 21.9, -8.2, 33.7],
+  "cameroon": [1.7, 8.5, 13.1, 16.2],
+  "senegal": [12.3, -17.5, 16.7, -11.4],
+  "uganda": [-1.5, 29.6, 4.2, 35.0],
+  "morocco": [27.7, -13.2, 35.9, -1.0],
+  "tunisia": [30.2, 7.5, 37.5, 11.6],
+  "iraq": [29.1, 38.8, 37.4, 48.8],
+  "saudi arabia": [16.4, 36.5, 32.2, 55.7],
+  "ukraine": [44.4, 22.1, 52.4, 40.2],
+  "myanmar": [9.8, 92.2, 28.5, 101.2],
+  "sri lanka": [5.9, 79.7, 9.8, 81.9],
+  "cambodia": [10.4, 102.3, 14.7, 107.6],
+  "laos": [13.9, 100.1, 22.5, 107.7],
+  "czech republic": [48.6, 12.1, 51.1, 18.9],
+  "hungary": [45.7, 16.1, 48.6, 22.9],
+  "romania": [43.6, 20.3, 48.3, 30.0],
+  "slovakia": [47.7, 16.8, 49.6, 22.6],
+  "croatia": [42.4, 13.5, 46.6, 19.4],
+  "serbia": [42.2, 18.8, 46.2, 23.0],
+  "new zealand": [-47.3, 166.4, -34.4, 178.6],
+  "israel": [29.5, 34.3, 33.3, 35.9],
+  "jordan": [29.2, 35.0, 33.4, 39.3],
+  "lebanon": [33.1, 35.1, 34.7, 36.6],
+  "syria": [32.3, 35.7, 37.3, 42.4],
+  "afghanistan": [29.4, 60.5, 38.5, 74.9],
+  "uzbekistan": [37.2, 56.0, 45.6, 73.1],
+  "kazakhstan": [40.6, 50.3, 55.4, 87.4],
+  "azerbaijan": [38.4, 44.8, 41.9, 50.4],
+  "georgia": [41.1, 40.0, 43.6, 46.7],
+  "armenia": [38.8, 43.4, 41.3, 46.6],
+};
+
+// ── Global AQI Map ────────────────────────────────────────────────────────────
 function AQILeafletMap({ theme }) {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -1358,68 +1493,165 @@ function AQILeafletMap({ theme }) {
     } catch (e) { console.warn('WAQI bounds:', e); }
   }, []);
 
-  // Key fix: use Nominatim reverse geocode to get country, then search WAQI specifically for that country's cities
   const handleMapHover = useCallback(async (lat, lng) => {
-    const roundedLat = Math.round(lat * 3) / 3;
-    const roundedLng = Math.round(lng * 3) / 3;
-    const cacheKey = `${roundedLat},${roundedLng}`;
-    let countryData = null;
-    if (nominatimCacheRef.current[cacheKey]) {
-      countryData = nominatimCacheRef.current[cacheKey];
-    } else {
-      try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=5`);
-        const data = await res.json();
-        if (!data.address?.country) return;
-        countryData = { country: data.address.country, countryCode: data.address.country_code?.toUpperCase() };
-        nominatimCacheRef.current[cacheKey] = countryData;
-      } catch { return; }
-    }
-    const { country, countryCode } = countryData;
-    if (country === lastCountryRef.current) return;
-    lastCountryRef.current = country;
-    setPanelLoading(true);
-    setCountryPanel({ country, countryCode, cities: [], aiText: null, loading: true });
+  const roundedLat = Math.round(lat * 3) / 3;
+  const roundedLng = Math.round(lng * 3) / 3;
+  const nomCacheKey = `${roundedLat},${roundedLng}`;
+
+  let countryData = null;
+  if (nominatimCacheRef.current[nomCacheKey]) {
+    countryData = nominatimCacheRef.current[nomCacheKey];
+  } else {
     try {
-      // Search WAQI using country name to get that country's own stations
-      const waqiRes = await fetch(`https://api.waqi.info/search/?keyword=${encodeURIComponent(country)}&token=${WAQI_TOKEN}`);
-      const waqiData = await waqiRes.json();
-      // Filter to stations actually IN that country using geo bounding
-      const allStations = (waqiData.data || []).filter(s => !isNaN(parseInt(s.aqi)) && s.station?.name);
-      // Try to pick stations that contain the country name or are geographically relevant
-      const cityMap: Record<string, { name: string; aqi: number; count: number }> = {};
-      allStations.slice(0, 30).forEach(s => {
-        const cityName = s.station.name.split(',')[0].trim();
-        const aqiVal = parseInt(s.aqi);
-        if (!cityMap[cityName]) cityMap[cityName] = { name: cityName, aqi: aqiVal, count: 1 };
-        else { cityMap[cityName].aqi = Math.round((cityMap[cityName].aqi * cityMap[cityName].count + aqiVal) / (cityMap[cityName].count + 1)); cityMap[cityName].count++; }
-      });
-      const cities = Object.values(cityMap).sort((a, b) => b.aqi - a.aqi).slice(0, 6);
-      setCountryPanel(prev => ({ ...prev, cities, loading: false }));
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=5`
+      );
+      const data = await res.json();
+      if (!data.address?.country) return;
+      countryData = {
+        country: data.address.country,
+        countryCode: data.address.country_code?.toUpperCase(),
+      };
+      nominatimCacheRef.current[nomCacheKey] = countryData;
+    } catch { return; }
+  }
 
-      if (aiCacheRef.current[country]) {
-        setCountryPanel(prev => ({ ...prev, aiText: aiCacheRef.current[country] }));
-        setPanelLoading(false); return;
+  const { country, countryCode } = countryData;
+  if (country === lastCountryRef.current) return;
+  lastCountryRef.current = country;
+
+  setPanelLoading(true);
+  setCountryPanel({ country, countryCode, cities: [], aiText: null, loading: true });
+
+  try {
+    // ── FIX: Use geographic bounding box to get stations IN this country ──
+    const countryKey = country.toLowerCase();
+    let cities = [];
+
+    // Find matching bounds
+    let bounds: [number, number, number, number] | null = null;
+    for (const [key, bb] of Object.entries(COUNTRY_BOUNDS)) {
+      if (countryKey.includes(key) || key.includes(countryKey)) {
+        bounds = bb; break;
       }
-      const cityData = cities.map(c => `${c.name}: AQI ${c.aqi}`).join(', ');
-      const avgAqi = cities.length ? Math.round(cities.reduce((a, c) => a + c.aqi, 0) / cities.length) : 'unknown';
-      const prompt = `Country: ${country}. Current city AQI readings: ${cityData || 'unavailable'}. Average: ${avgAqi}. Give 2 sentences: (1) Primary pollution sources specific to ${country}. (2) Athlete advisory for training in ${country} right now. Be country-specific and concise.`;
-      const gemRes = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 200, messages: [{ role: 'user', content: prompt }] }) });
-      const gemData = await gemRes.json();
-      const aiText = gemData.content?.[0]?.text || '';
-      if (aiText) { aiCacheRef.current[country] = aiText; setCountryPanel(prev => ({ ...prev, aiText })); }
-    } catch (e) { console.warn('Country panel:', e); setCountryPanel(prev => ({ ...prev, loading: false })); }
-    setPanelLoading(false);
-  }, []);
+    }
 
+    if (bounds) {
+      // Use WAQI map/bounds — returns stations actually within the bbox
+      const [s, w, n, e] = bounds;
+      const waqiRes = await fetch(
+        `https://api.waqi.info/map/bounds/?latlng=${s},${w},${n},${e}&token=${WAQI_TOKEN}`
+      );
+      const waqiData = await waqiRes.json();
+
+      if (waqiData.status === 'ok' && waqiData.data?.length > 0) {
+        // Group by city name (first segment before comma), average AQI
+        const cityMap: Record<string, { name: string; aqi: number; count: number }> = {};
+        waqiData.data.forEach(st => {
+          const aqiVal = parseInt(st.aqi);
+          if (isNaN(aqiVal) || !st.station?.name) return;
+          const cityName = st.station.name.split(',')[0].trim();
+          if (!cityMap[cityName]) {
+            cityMap[cityName] = { name: cityName, aqi: aqiVal, count: 1 };
+          } else {
+            cityMap[cityName].aqi = Math.round(
+              (cityMap[cityName].aqi * cityMap[cityName].count + aqiVal) /
+              (cityMap[cityName].count + 1)
+            );
+            cityMap[cityName].count++;
+          }
+        });
+        cities = Object.values(cityMap)
+          .sort((a, b) => b.aqi - a.aqi)  // highest AQI first (worst air)
+          .slice(0, 8);
+      }
+    }
+
+    // Fallback: if bounds lookup gave 0 results, use a ~400km box around the hovered point
+    // This avoids text-search which returns wrong-country results (e.g. "Niger" returns Bangalore)
+    if (cities.length === 0) {
+      const delta = 3.5; // ~400km
+      const s2 = lat - delta, n2 = lat + delta, w2 = lng - delta, e2 = lng + delta;
+      try {
+        const waqiRes = await fetch(
+          `https://api.waqi.info/map/bounds/?latlng=${s2},${w2},${n2},${e2}&token=${WAQI_TOKEN}`
+        );
+        const waqiData = await waqiRes.json();
+        if (waqiData.status === 'ok' && waqiData.data?.length > 0) {
+          const cityMap: Record<string, { name: string; aqi: number; count: number }> = {};
+          waqiData.data.forEach(st => {
+            const aqiVal = parseInt(st.aqi);
+            if (isNaN(aqiVal) || !st.station?.name) return;
+            const cityName = st.station.name.split(',')[0].trim();
+            if (!cityMap[cityName]) cityMap[cityName] = { name: cityName, aqi: aqiVal, count: 1 };
+            else { cityMap[cityName].aqi = Math.round((cityMap[cityName].aqi * cityMap[cityName].count + aqiVal) / (cityMap[cityName].count + 1)); cityMap[cityName].count++; }
+          });
+          cities = Object.values(cityMap).sort((a, b) => b.aqi - a.aqi).slice(0, 8);
+        }
+      } catch { /* ignore */ }
+    }
+
+    setCountryPanel(prev => ({ ...prev, cities, loading: false }));
+
+    // ── AI insight ──
+    if (aiCacheRef.current[country]) {
+      setCountryPanel(prev => ({ ...prev, aiText: aiCacheRef.current[country] }));
+      setPanelLoading(false);
+      return;
+    }
+
+    if (!GEMINI_KEY) {
+      // No API key — show a static message
+      const fallback = `${country} air quality data shown above from ${cities.length} monitoring stations. Top polluted city: ${cities[0]?.name ?? 'N/A'} (AQI ${cities[0]?.aqi ?? 'N/A'}).`;
+      aiCacheRef.current[country] = fallback;
+      setCountryPanel(prev => ({ ...prev, aiText: fallback }));
+      setPanelLoading(false);
+      return;
+    }
+
+    const cityData = cities.map(c => `${c.name}: AQI ${c.aqi}`).join(', ');
+    const avgAqi = cities.length
+      ? Math.round(cities.reduce((a, c) => a + c.aqi, 0) / cities.length)
+      : 'unknown';
+
+    const prompt = `Country: ${country}. Current city AQI readings (sorted worst to best): ${cityData || 'unavailable'}. Average: ${avgAqi}. Give 2 sentences: (1) Primary pollution sources specific to ${country}. (2) Athlete advisory for training in ${country} right now. Be country-specific and concise.`;
+
+    const aiText = await geminiAI(prompt);
+    if (aiText) {
+      aiCacheRef.current[country] = aiText;
+      setCountryPanel(prev => ({ ...prev, aiText }));
+    }
+  } catch (e) {
+    console.warn('Country panel error:', e);
+    setCountryPanel(prev => ({ ...prev, loading: false }));
+  }
+
+  setPanelLoading(false);
+}, []);
+  // Wire map events once map is ready
   useEffect(() => {
+    if (!mapReady || !mapInstanceRef.current) return;
     const map = mapInstanceRef.current;
-    if (!map || !mapReady) return;
-    const onMoveEnd = () => { clearTimeout(boundsTimerRef.current); boundsTimerRef.current = setTimeout(fetchStations, 400); };
-    const onMouseMove = (e) => { clearTimeout(hoverTimerRef.current); hoverTimerRef.current = setTimeout(() => handleMapHover(e.latlng.lat, e.latlng.lng), 1000); };
-    map.on('moveend', onMoveEnd); map.on('zoomend', onMoveEnd); map.on('mousemove', onMouseMove);
+
+    // fetchStations on move/zoom
+    map.on('moveend', fetchStations);
+    map.on('zoomend', fetchStations);
     fetchStations();
-    return () => { map.off('moveend', onMoveEnd); map.off('zoomend', onMoveEnd); map.off('mousemove', onMouseMove); };
+
+    // handleMapHover on mousemove — debounced via hoverTimerRef
+    const onMouseMove = (e) => {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = setTimeout(() => {
+        handleMapHover(e.latlng.lat, e.latlng.lng);
+      }, 400);
+    };
+    map.on('mousemove', onMouseMove);
+
+    return () => {
+      map.off('moveend', fetchStations);
+      map.off('zoomend', fetchStations);
+      map.off('mousemove', onMouseMove);
+    };
   }, [mapReady, fetchStations, handleMapHover]);
 
   const handleSearch = async () => {
@@ -1553,17 +1785,13 @@ function AQICoach({ theme, aqi, components }) {
     const pollSummary = Object.entries(components).map(([k, v]) => `${POLLUTANT_INFO[k]?.name || k}: ${v.toFixed(2)} μg/m³`).join(', ');
     const systemPrompt = `You are an expert AQI Coach specialising in sports physiology and air quality science. Current AQI: ${aqi}/5 (${AQI_LEVELS[aqi]?.label}). Pollutants: ${pollSummary}. Give concise, practical, science-backed advice in 2-4 sentences. Be direct and actionable.`;
     try {
-      const history = messages.slice(-6).map(m => ({ role: m.role, content: m.content }));
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-        body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 350, system: systemPrompt, messages: [...history, { role: 'user', content: userMsg }] })
-      });
-      const data = await res.json();
-      const reply = data.content?.[0]?.text || 'I couldn\'t process that. Please try again.';
-      setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
-    } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: `Based on AQI ${aqi}/5: ${AQI_LEVELS[aqi]?.advice} Always monitor your breathing rate and stop if you feel respiratory discomfort.` }]);
+      const history = messages.slice(-6).map(m => `${m.role}: ${m.content}`).join('\n');
+      const fullPrompt = `${systemPrompt}\n\nConversation so far:\n${history}\nuser: ${userMsg}\nassistant:`;
+      const reply = await geminiAI(fullPrompt);
+      setMessages(prev => [...prev, { role: 'assistant', content: reply || 'No response received.' }]);
+    } catch (err) {
+      console.error('Coach error:', err);
+      setMessages(prev => [...prev, { role: 'assistant', content: `⚠️ AI error: ${err.message}. Make sure VITE_GEMINI_KEY is set in your .env file.` }]);
     }
     setLoading(false);
   };
@@ -1667,9 +1895,8 @@ function ExposureCalculator({ theme, components, aqi }) {
     setAiLoading(true);
     try {
       const prompt = `Athlete: ${weightKg}kg, ${durationMin} min ${activityType} at ${intensity} intensity. PM2.5: ${pm25Conc} μg/m³, NO2: ${no2Conc} μg/m³, O3: ${o3Conc} μg/m³. Estimated PM2.5 lung deposit: ${pm25Dep.toFixed(1)} μg. In 3 bullet points, give: (1) specific health impact of this exposure session, (2) recovery nutrition/supplement advice to counteract oxidative stress, (3) one concrete modification to reduce exposure by 40%+. Be specific.`;
-      const res = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }, body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 400, messages: [{ role: 'user', content: prompt }] }) });
-      const data = await res.json();
-      setAiRisk(data.content?.[0]?.text || '');
+      const riskText = await geminiAI(prompt);
+      setAiRisk(riskText || '');
     } catch { setAiRisk('• Moderate bronchial inflammation likely from this exposure level.\n• Consider vitamin C (1000mg) and omega-3s post-session to reduce oxidative stress.\n• Reducing pace by 20% cuts ventilation rate ~30%, significantly lowering PM2.5 intake.'); }
     setAiLoading(false);
   };
@@ -1931,10 +2158,14 @@ function Dashboard() {
   }, []);
 
   const handleLocationSelect = ({ locationName: name, lat, lng, data: newData }) => {
-    setData(newData); setLocationName(name);
-    setCustomLocationActive(true); setMockAqi(null); setSelectedPollutant(null);
-    if (lat && lng) { setUserLat(lat); setUserLng(lng); }
-  };
+  setData(newData); setLocationName(name);
+  setCustomLocationActive(true); setMockAqi(null); setSelectedPollutant(null);
+  // ── FIX: update coords whenever we have valid numbers (0 is valid!) ──
+  if (lat != null && lng != null && !isNaN(lat) && !isNaN(lng)) {
+    setUserLat(lat);
+    setUserLng(lng);
+  }
+};
 
   const handleResetLocation = () => {
     if (gpsData) {
