@@ -1,5 +1,5 @@
 // ── API Keys ────────────────────────────────────────────────────────
-export const WAQI_TOKEN   = import.meta.env.VITE_WAQI_TOKEN   || 'demo';
+export const WAQI_TOKEN = import.meta.env.VITE_WAQI_TOKEN || 'demo';
 export const OWM_KEY      = import.meta.env.VITE_OWM_KEY      || '';
 export const GEMINI_KEY   = import.meta.env.VITE_GEMINI_KEY   || '';
 
